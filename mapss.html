@@ -2,28 +2,27 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Lead Heatmap with Counts</title>
+  <title>Sharp Red Heat Dots</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
-    html,body { height:100%; margin:0; }
+    html, body { height:100%; margin:0; }
     #map { width:100%; height:100vh; }
-    .leaflet-tooltip {
+    .count-label {
       font-size: 11px;
       font-weight: bold;
-      background: rgba(255,255,255,0.8);
-      border: 1px solid #666;
-      border-radius: 3px;
-      padding: 1px 3px;
+      color: black;
+      text-shadow: 1px 1px 2px white;
+      pointer-events: none;
     }
   </style>
 </head>
 <body>
   <div id="map"></div>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
   <script>
-    // ---- Dataset ----
     const rawData = [
       ['Brazil', 10.65, 52.95, 1],
       ['Canada', 56.13, -106.35, 3],
@@ -42,52 +41,35 @@
       ['United States of America', 37.09, -95.7, 25]
     ];
 
-    // Normalize for heatmap intensity
     const maxLead = Math.max(...rawData.map(d => d[3]));
     const heatPoints = rawData.map(d => [d[1], d[2], d[3] / maxLead]);
 
-    // Init map
     const map = L.map('map').setView([20, 10], 2);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors'
     }).addTo(map);
 
-    // Heat layer with strong gradient
     L.heatLayer(heatPoints, {
-      radius: 45,
-      blur: 30,
+      radius: 25,   // tighter radius
+      blur: 5,      // less blur = sharper red dot
       maxZoom: 6,
       gradient: {
-        0.2: 'blue',
-        0.4: 'cyan',
-        0.6: 'lime',
-        0.8: 'yellow',
-        1.0: 'red'
+        0.4: 'red',
+        1.0: 'darkred'
       }
     }).addTo(map);
 
-    // Circles with variable size based on Lead Count
+    // Add numeric labels
     rawData.forEach(([country, lat, lng, leads]) => {
-      const radius = Math.sqrt(leads) * 1.5;
-
-      const circle = L.circleMarker([lat, lng], {
-        radius: radius,
-        fillColor: 'black',
-        color: 'white',
-        weight: 1,
-        fillOpacity: 0.7
-      }).addTo(map);
-
-      // Tooltip showing only count
-      circle.bindTooltip(
-        `${leads}`,
-        { permanent: true, direction: "top", offset: [0, -2] }
-      );
+      const icon = L.divIcon({
+        className: 'count-label',
+        html: String(leads),
+        iconSize: null
+      });
+      L.marker([lat, lng], { icon: icon, interactive: false }).addTo(map);
     });
 
-    // Fit bounds
-    map.fitBounds(L.latLngBounds(rawData.map(d => [d[1], d[2]])).pad(0.2));
+    map.fitBounds(L.latLngBounds(rawData.map(d => [d[1], d[2]])).pad(0.25));
   </script>
 </body>
 </html>
-
