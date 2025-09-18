@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Sharp Red Heat Dots</title>
+  <title>Dots with Scaled Glow</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
@@ -21,7 +21,6 @@
   <div id="map"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
   <script>
     const rawData = [
       ['Brazil', 10.65, 52.95, 1],
@@ -42,25 +41,35 @@
     ];
 
     const maxLead = Math.max(...rawData.map(d => d[3]));
-    const heatPoints = rawData.map(d => [d[1], d[2], d[3] / maxLead]);
 
     const map = L.map('map').setView([20, 10], 2);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors'
     }).addTo(map);
 
-    L.heatLayer(heatPoints, {
-      radius: 25,   // tighter radius
-      blur: 5,      // less blur = sharper red dot
-      maxZoom: 6,
-      gradient: {
-        0.4: 'red',
-        1.0: 'darkred'
-      }
-    }).addTo(map);
-
-    // Add numeric labels
     rawData.forEach(([country, lat, lng, leads]) => {
+      // Glow radius scales with count
+      const glowRadius = (Math.sqrt(leads) / Math.sqrt(maxLead)) * 500000; 
+
+      // Outer glow (scaled by count)
+      L.circle([lat, lng], {
+        radius: glowRadius,
+        color: "red",
+        fillColor: "red",
+        fillOpacity: 0.25,
+        weight: 0
+      }).addTo(map);
+
+      // Inner solid dot (same size everywhere)
+      L.circleMarker([lat, lng], {
+        radius: 6,
+        color: "darkred",
+        fillColor: "red",
+        fillOpacity: 1,
+        weight: 1
+      }).addTo(map);
+
+      // Label for count
       const icon = L.divIcon({
         className: 'count-label',
         html: String(leads),
