@@ -1,84 +1,197 @@
 <!doctype html>
-<html lang="en">
+<html>
 <head>
   <meta charset="utf-8" />
-  <title>Dots with Scaled Glow</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Country-wise Lead Count Heatmap</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
   <style>
-    html, body { height:100%; margin:0; }
-    #map { width:100%; height:100vh; }
-    .count-label {
-      font-size: 11px;
-      font-weight: bold;
-      color: black;
-      text-shadow: 1px 1px 2px white;
-      pointer-events: none;
+    html, body, #map { height: 100%; margin: 0; padding: 0; }
+    #legend {
+      position: absolute;
+      z-index: 999;
+      left: 10px;
+      bottom: 30px;
+      background: rgba(255,255,255,0.95);
+      padding: 10px;
+      border-radius: 6px;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.18);
+      font-family: Arial, sans-serif;
+      font-size: 13px;
+    }
+    #controls {
+      position: absolute;
+      z-index: 999;
+      right: 10px;
+      top: 10px;
+      background: rgba(255,255,255,0.95);
+      padding: 10px;
+      border-radius: 6px;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.18);
+      font-family: Arial, sans-serif;
+      font-size: 13px;
+    }
+    /* Floating card */
+    #hoverCard {
+      position: absolute;
+      background: rgba(0,0,0,0.8);
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-family: Arial, sans-serif;
+      font-size: 13px;
+      pointer-events: none; /* let mouse pass through */
+      z-index: 2000;
+      display: none;
+      white-space: nowrap;
     }
   </style>
 </head>
 <body>
   <div id="map"></div>
 
+  <div id="legend">
+    <strong>Lead count heat intensity</strong>
+    <div style="margin-top:6px; font-size:12px; color:#444;">
+      Color ramp (low → high): <em>blue → green → yellow → red</em>
+    </div>
+  </div>
+
+  <div id="controls">
+    <label><input type="checkbox" id="scaleRadius" /> Scale radius with zoom</label><br/>
+    <label style="font-size:12px; color:#444;">Heat radius (px): <input id="heatRadius" type="number" value="25" style="width:60px" /></label>
+  </div>
+
+  <!-- Floating card -->
+  <div id="hoverCard"></div>
+
+  <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- heatmap.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/heatmap.js/2.0.0/heatmap.min.js"></script>
+
+  <!-- leaflet-heatmap plugin -->
+  <script src="https://cdn.jsdelivr.net/npm/leaflet-heatmap/leaflet-heatmap.js"></script>
+
   <script>
-    const rawData = [
-      ['Brazil', 10.65, 52.95, 1],
-      ['Canada', 56.13, -106.35, 3],
-      ['China', 35, 103, 259],
-      ['Finland', 64, 26, 2],
-      ['Hong Kong', 22.3, 114.2, 24],
-      ['India', 20, 77, 2],
-      ['Korea (Republic of)', 35.86, 127.1, 27],
-      ['Mauritius', -20.35, 57.5, 1],
-      ['Netherlands', 52.3, 5.3, 1],
-      ['Philippines', 12.88, 122, 1],
-      ['Russian Federation', 55, 103, 5],
-      ['Singapore', 1.29, 103.85, 6],
-      ['Türkiye', 39, 35, 2],
-      ['United Kingdom', 55, -3.4, 10],
-      ['United States of America', 37.09, -95.7, 25]
+    // DATASET with Lead Count + Value
+    const countries = [
+      { country: "Brazil", lat: -14.2350, lng: -51.9253, count: 1, value: 60000 },
+      { country: "Canada", lat: 56.1304, lng: -106.3468, count: 3, value: 500 },
+      { country: "China", lat: 35.8617, lng: 104.1954, count: 259, value: 962500 },
+      { country: "Finland", lat: 61.9241, lng: 25.7482, count: 2, value: 1000 },
+      { country: "Hong Kong", lat: 22.3193, lng: 114.1694, count: 24, value: 13000 },
+      { country: "India", lat: 20.5937, lng: 78.9629, count: 2, value: 0 },
+      { country: "Korea (Republic of)", lat: 35.9078, lng: 127.7669, count: 27, value: 28000 },
+      { country: "Mauritius", lat: -20.3484, lng: 57.5522, count: 1, value: 0 },
+      { country: "Netherlands", lat: 52.1326, lng: 5.2913, count: 1, value: 0 },
+      { country: "Philippines", lat: 12.8797, lng: 121.7740, count: 1, value: 2000 },
+      { country: "Russian Federation", lat: 61.5240, lng: 105.3188, count: 5, value: 0 },
+      { country: "Singapore", lat: 1.3521, lng: 103.8198, count: 6, value: 0 },
+      { country: "Türkiye", lat: 38.9637, lng: 35.2433, count: 2, value: 33000 },
+      { country: "United Kingdom", lat: 55.3781, lng: -3.4360, count: 10, value: 89000 },
+      { country: "United States of America", lat: 37.0902, lng: -95.7129, count: 25, value: 1351000 }
     ];
 
-    const maxLead = Math.max(...rawData.map(d => d[3]));
+    // Heatmap data (log scale for visibility)
+    const heatData = {
+      max: Math.max(...countries.map(d => Math.log(d.count + 1))),
+      data: countries.map(d => ({
+        lat: d.lat,
+        lng: d.lng,
+        value: Math.log(d.count + 1)
+      }))
+    };
 
+    // Map
     const map = L.map('map').setView([20, 10], 2);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors'
+      attribution: '© OpenStreetMap contributors',
+      maxZoom: 18
     }).addTo(map);
 
-    rawData.forEach(([country, lat, lng, leads]) => {
-      // Glow radius scales with count
-      const glowRadius = (Math.sqrt(leads) / Math.sqrt(maxLead)) * 500000; 
+    // Heatmap config
+    function makeCfg(radiusPx, scaleRadiusFlag) {
+      return {
+        radius: radiusPx,
+        maxOpacity: 0.9,
+        scaleRadius: scaleRadiusFlag,
+        useLocalExtrema: false,
+        latField: 'lat',
+        lngField: 'lng',
+        valueField: 'value',
+        gradient: {
+          0.0: 'rgba(0,100,255,0.8)',   // blue
+          0.25: 'rgba(0,220,120,0.8)',  // green
+          0.5: 'rgba(255,255,0,0.85)',  // yellow
+          1.0: 'rgba(255,0,0,0.9)'      // red
+        }
+      };
+    }
 
-      // Outer glow (scaled by count)
-      L.circle([lat, lng], {
-        radius: glowRadius,
-        color: "red",
-        fillColor: "red",
-        fillOpacity: 0.25,
-        weight: 0
-      }).addTo(map);
+    let cfg = makeCfg(Number(document.getElementById('heatRadius').value) || 25, false);
+    let heatmapLayer = new HeatmapOverlay(cfg).addTo(map);
+    heatmapLayer.setData(heatData);
 
-      // Inner solid dot (same size everywhere)
-      L.circleMarker([lat, lng], {
-        radius: 6,
-        color: "darkred",
-        fillColor: "red",
-        fillOpacity: 1,
-        weight: 1
-      }).addTo(map);
+    // Hover card element
+    const hoverCard = document.getElementById('hoverCard');
 
-      // Label for count
-      const icon = L.divIcon({
-        className: 'count-label',
-        html: String(leads),
-        iconSize: null
+    // Circle markers (subtle, just for hover detection)
+    const markerLayer = L.layerGroup().addTo(map);
+    const circleMultiplier = 1.4;
+
+    countries.forEach(d => {
+      const pixelRadius = 2 + Math.sqrt(d.count) * circleMultiplier;
+
+      const marker = L.circleMarker([d.lat, d.lng], {
+        radius: pixelRadius,
+        weight: 0.8,
+        color: 'rgba(80,80,80,0.35)',
+        fillColor: 'rgba(255,80,80,0.35)',
+        fillOpacity: 0.45
+      }).addTo(markerLayer);
+
+      // Hover events for floating card
+      marker.on('mouseover', (e) => {
+        hoverCard.innerHTML = `
+          <strong>${d.country}</strong><br/>
+          Leads: ${d.count}<br/>
+          Value: ${d.value.toLocaleString()}
+        `;
+        hoverCard.style.display = 'block';
       });
-      L.marker([lat, lng], { icon: icon, interactive: false }).addTo(map);
+
+      marker.on('mousemove', (e) => {
+        hoverCard.style.left = (e.originalEvent.pageX + 15) + 'px';
+        hoverCard.style.top = (e.originalEvent.pageY + 15) + 'px';
+      });
+
+      marker.on('mouseout', () => {
+        hoverCard.style.display = 'none';
+      });
     });
 
-    map.fitBounds(L.latLngBounds(rawData.map(d => [d[1], d[2]])).pad(0.25));
+    // Controls
+    const scaleCheckbox = document.getElementById('scaleRadius');
+    const radiusInput = document.getElementById('heatRadius');
+    scaleCheckbox.addEventListener('change', () => {
+      cfg = makeCfg(Number(radiusInput.value) || 25, scaleCheckbox.checked);
+      rebuildHeatmap();
+    });
+    radiusInput.addEventListener('change', () => {
+      cfg = makeCfg(Number(radiusInput.value) || 25, scaleCheckbox.checked);
+      rebuildHeatmap();
+    });
+
+    function rebuildHeatmap() {
+      if (heatmapLayer) map.removeLayer(heatmapLayer);
+      heatmapLayer = new HeatmapOverlay(cfg).addTo(map);
+      heatmapLayer.setData(heatData);
+    }
   </script>
 </body>
 </html>
